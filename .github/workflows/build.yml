@@ -24,18 +24,34 @@ jobs:
             https://github.com/crdroidandroid/android_kernel_oneplus_sm8550 kernel
           cd kernel
           git log --oneline -1
-          ls -d build* 2>/dev/null || true
 
-      - name: Download clang-r563880c
+      - name: Locate clang prebuilt
         run: |
           set -e
-          URL="https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/main/clang-r563880c.tar.gz"
-          curl -L --retry 5 --retry-delay 5 -o /tmp/clang.tar.gz "$URL"
-          ls -lh /tmp/clang.tar.gz
-          mkdir -p /tmp/clang
-          tar -xzf /tmp/clang.tar.gz -C /tmp/clang
-          /tmp/clang/bin/clang --version
-          echo "/tmp/clang/bin" >> $GITHUB_PATH
+          REPO=https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86
+          git clone --depth 1 --filter=blob:none --sparse "$REPO" /tmp/clangrepo
+          cd /tmp/clangrepo
+          echo "=== clang dirs in main HEAD ==="
+          git ls-tree --name-only HEAD | grep '^clang-' | sort -V | tail -40 || true
+          echo "=== branches ==="
+          git ls-remote --heads origin 2>/dev/null | grep -E 'refs/heads/(main|android1[4-7]-release|android1[5-7])$' || true
+          TARGET=""
+          for BR in main android17-release android16-release android15-release; do
+            echo "--- trying branch: $BR"
+            if ! git fetch --depth 1 origin "$BR" 2>/dev/null; then echo "  fetch failed"; continue; fi
+            git checkout -q FETCH_HEAD
+            echo "  clang dirs:"; git ls-tree --name-only HEAD | grep '^clang-' | sort -V | tail -10 || true
+            if git ls-tree --name-only HEAD | grep -qx 'clang-r563880c'; then TARGET=clang-r563880c; echo "FOUND clang-r563880c in $BR"; break; fi
+          done
+          if [ -z "$TARGET" ]; then
+            echo "!!! 没找到 clang-r563880c，回退到该分支最新 clang-r* 目录"
+            TARGET=$(git ls-tree --name-only HEAD | grep '^clang-r' | sort -V | tail -1)
+            echo "FALLBACK: $TARGET"
+          fi
+          echo "SELECTED=$TARGET"
+          git sparse-checkout set "$TARGET"
+          echo "/tmp/clangrepo/$TARGET/bin" >> $GITHUB_PATH
+          /tmp/clangrepo/$TARGET/bin/clang --version
 
       - name: Integrate KernelSU-Next
         run: |
