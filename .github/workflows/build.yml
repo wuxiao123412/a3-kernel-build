@@ -73,7 +73,7 @@ jobs:
           cp "$GITHUB_WORKSPACE/config" .config
           ./scripts/config --file .config -e KSU
           ./scripts/config --file .config -e MODULES -e MODVERSIONS -e KPROBES -e KALLSYMS_ALL
-          ./scripts/config --file .config -e LTO_CLANG -e LTO_CLANG_THIN -d LTO_CLANG_FULL
+          ./scripts/config --file .config -e LTO_CLANG -e LTO_CLANG_FULL -d LTO_CLANG_THIN
           ./scripts/config --file .config -e CFI_CLANG -e CFI_CLANG_SHADOW
           ./scripts/config --file .config -d DEBUG_INFO -d DEBUG_INFO_BTF -d DEBUG_INFO_DWARF5 -d DEBUG_INFO_DWARF4
           make LLVM=1 ARCH=arm64 olddefconfig
