@@ -1,0 +1,78 @@
+name: Build Kernel
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq build-essential bc bison flex libssl-dev libelf-dev \
+            python3 git curl zip unzip rsync
+
+      - name: Clone crDroid kernel (16.0)
+        run: |
+          git clone --depth 1 -b 16.0 \
+            https://github.com/crdroidandroid/android_kernel_oneplus_sm8550 kernel
+          cd kernel
+          git log --oneline -1
+          ls -d build* 2>/dev/null || true
+
+      - name: Download clang-r563880c
+        run: |
+          set -e
+          URL="https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/main/clang-r563880c.tar.gz"
+          curl -L --retry 5 --retry-delay 5 -o /tmp/clang.tar.gz "$URL"
+          ls -lh /tmp/clang.tar.gz
+          mkdir -p /tmp/clang
+          tar -xzf /tmp/clang.tar.gz -C /tmp/clang
+          /tmp/clang/bin/clang --version
+          echo "/tmp/clang/bin" >> $GITHUB_PATH
+
+      - name: Integrate KernelSU-Next
+        run: |
+          cd kernel
+          curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/dev/kernel/setup.sh" -o /tmp/ksu-setup.sh
+          bash /tmp/ksu-setup.sh
+          echo "--- drivers/kernelsu ---"
+          ls -la drivers/kernelsu
+          echo "--- drivers/Makefile ---"
+          tail -3 drivers/Makefile
+          echo "--- drivers/Kconfig ---"
+          grep -n kernelsu drivers/Kconfig
+
+      - name: Configure
+        run: |
+          cd kernel
+          cp "$GITHUB_WORKSPACE/config" .config
+          ./scripts/config --file .config -e KSU
+          ./scripts/config --file .config -e MODULES -e MODVERSIONS -e KPROBES -e KALLSYMS_ALL
+          ./scripts/config --file .config -e LTO_CLANG -e LTO_CLANG_THIN -d LTO_CLANG_FULL
+          ./scripts/config --file .config -e CFI_CLANG -e CFI_CLANG_SHADOW
+          ./scripts/config --file .config -d DEBUG_INFO -d DEBUG_INFO_BTF -d DEBUG_INFO_DWARF5 -d DEBUG_INFO_DWARF4
+          make LLVM=1 ARCH=arm64 olddefconfig
+          grep -E '^CONFIG_(KSU|LTO|CFI|LOCALVERSION|MODVERSIONS|DEBUG_INFO)=' .config || true
+
+      - name: Build
+        run: |
+          cd kernel
+          make LLVM=1 ARCH=arm64 -j4 Image
+          ls -l arch/arm64/boot/Image
+          cat include/config/kernel.release
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: kernel-image
+          path: |
+            kernel/arch/arm64/boot/Image
+            kernel/vmlinux.symvers
+            kernel/.config
