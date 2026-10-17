@@ -18,11 +18,15 @@ jobs:
           sudo apt-get install -y -qq build-essential bc bison flex libssl-dev libelf-dev \
             python3 git curl zip unzip rsync
 
-      - name: Clone crDroid kernel (16.0)
+      - name: Clone crDroid kernel + modules
         run: |
-          git clone --depth 1 -b 16.0 \
-            https://github.com/crdroidandroid/android_kernel_oneplus_sm8550 kernel
+          git clone --depth 1 -b 16.0 https://github.com/crdroidandroid/android_kernel_oneplus_sm8550 kernel
+          git clone --depth 1 -b 16.0 https://github.com/crdroidandroid/android_kernel_oneplus_sm8550-modules sm8550-modules
           cd kernel
+          ln -sfn ../sm8550-modules sm8550-modules
+          echo "--- symlink check ---"
+          ls -l sm8550-modules
+          ls -l kernel/oplus_cpu/thermal/Kconfig
           git log --oneline -1
 
       - name: Locate clang prebuilt
@@ -33,8 +37,6 @@ jobs:
           cd /tmp/clangrepo
           echo "=== clang dirs in main HEAD ==="
           git ls-tree --name-only HEAD | grep '^clang-' | sort -V | tail -40 || true
-          echo "=== branches ==="
-          git ls-remote --heads origin 2>/dev/null | grep -E 'refs/heads/(main|android1[4-7]-release|android1[5-7])$' || true
           TARGET=""
           for BR in main android17-release android16-release android15-release; do
             echo "--- trying branch: $BR"
